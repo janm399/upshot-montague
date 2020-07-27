@@ -6,21 +6,28 @@ import com.workday.montague.semantics.{Ignored, SemanticState}
 import scala.collection.mutable
 import scala.io.Source
 
-case class ParserDict[S](map: Map[String, Seq[(S, SemanticState)]] = Map[String, Seq[(S, SemanticState)]](),
-                         funcs: Seq[String => Seq[(S, SemanticState)]] = Nil,
-                         fallbacks: Seq[String => Seq[(S, SemanticState)]] = Nil)
-extends (String => Seq[(S, SemanticState)]) {
+case class ParserDict[S](
+    map: Map[String, Seq[(S, SemanticState)]] =
+      Map[String, Seq[(S, SemanticState)]](),
+    funcs: Seq[String => Seq[(S, SemanticState)]] = Nil,
+    fallbacks: Seq[String => Seq[(S, SemanticState)]] = Nil
+) extends (String => Seq[(S, SemanticState)]) {
 
   def +[U](pair: U)(implicit adder: DictAdder[S, U]): ParserDict[S] = {
     adder(this, pair)
   }
 
-  def withTerm(term: String, entries: Seq[(S, SemanticState)]): ParserDict[S] = {
+  def withTerm(
+      term: String,
+      entries: Seq[(S, SemanticState)]
+  ): ParserDict[S] = {
     val updatedEntries = map.getOrElse(term, Seq()) ++ entries
     ParserDict(map.updated(term, updatedEntries), funcs, fallbacks)
   }
 
-  def withTerms(termsAndEntries: Map[String, Seq[(S, SemanticState)]]): ParserDict[S] = {
+  def withTerms(
+      termsAndEntries: Map[String, Seq[(S, SemanticState)]]
+  ): ParserDict[S] = {
     val newMap = mutable.Map(map.toSeq: _*)
     for ((term, entries) <- termsAndEntries) {
       val updatedEntries = map.getOrElse(term, Seq()) ++ entries
@@ -33,13 +40,15 @@ extends (String => Seq[(S, SemanticState)]) {
     ParserDict(map, funcs :+ func, fallbacks)
   }
 
-  def withFallback(fallback: String => Seq[(S, SemanticState)]): ParserDict[S] = {
+  def withFallback(
+      fallback: String => Seq[(S, SemanticState)]
+  ): ParserDict[S] = {
     ParserDict(map, funcs, fallbacks :+ fallback)
   }
 
   def apply(str: String): Seq[(S, SemanticState)] = {
     getMapEntries(str) ++ getFuncEntries(str) match {
-      case Nil => getFallbackEntries(str)
+      case Nil     => getFallbackEntries(str)
       case entries => entries
     }
   }
@@ -61,7 +70,7 @@ extends (String => Seq[(S, SemanticState)]) {
 
   private def getFallbackEntries(str: String): Seq[(S, SemanticState)] = {
     if (str contains " ") {
-      Nil  // only fallback if str is a single token!
+      Nil // only fallback if str is a single token!
     } else {
       for {
         fallback <- fallbacks
@@ -74,22 +83,31 @@ extends (String => Seq[(S, SemanticState)]) {
 }
 
 object ParserDict {
-  def fromCcgBankLexicon(path: String): ParserDict[CcgCat] = fromSpaceSeparatedLexicon(path, 0, 4)
+  def fromCcgBankLexicon(path: String): ParserDict[CcgCat] =
+    fromSpaceSeparatedLexicon(path, 0, 4)
 
   /**
-   * The old-style CCG Bank lexicons (http://juliahmr.cs.illinois.edu/CCGlexicon/) had a slightly different
-   * column ordering.
-   */
-  def fromOldCcgBankLexicon(path: String): ParserDict[CcgCat] = fromSpaceSeparatedLexicon(path, 0, 3)
+    * The old-style CCG Bank lexicons (http://juliahmr.cs.illinois.edu/CCGlexicon/) had a slightly different
+    * column ordering.
+    */
+  def fromOldCcgBankLexicon(path: String): ParserDict[CcgCat] =
+    fromSpaceSeparatedLexicon(path, 0, 3)
 
-  private def fromSpaceSeparatedLexicon(path: String, termIdx: Int, categoryProbIdx: Int): ParserDict[CcgCat] = {
-    val lexiconMap: mutable.Map[String, mutable.ListBuffer[CcgCat]] = mutable.Map()
+  private def fromSpaceSeparatedLexicon(
+      path: String,
+      termIdx: Int,
+      categoryProbIdx: Int
+  ): ParserDict[CcgCat] = {
+    val lexiconMap: mutable.Map[String, mutable.ListBuffer[CcgCat]] =
+      mutable.Map()
 
     val file = Source.fromFile(path)
     for (line <- file.getLines()) {
       val parts = line.split("[\t ]+")
       val term = parts(termIdx)
-      val parsedCategory: CategoryParser.ParseResult[CcgCat] = CategoryParser(parts(1))
+      val parsedCategory: CategoryParser.ParseResult[CcgCat] = CategoryParser(
+        parts(1)
+      )
       val categoryProbability = parts(categoryProbIdx).toDouble
       if (parsedCategory.successful) {
         val cat: CcgCat = parsedCategory.get % categoryProbability
@@ -100,10 +118,14 @@ object ParserDict {
         }
       }
     }
-    ParserDict[CcgCat](syntaxToSemantics(lexiconMap.toMap.mapValues(s => s.toSeq)))
+    ParserDict[CcgCat](
+      syntaxToSemantics(lexiconMap.view.mapValues(s => s.toSeq).toMap)
+    )
   }
 
-  private def syntaxToSemantics[S](inputMap: Map[String, Seq[S]]): Map[String, Seq[(S, SemanticState)]] = {
+  private def syntaxToSemantics[S](
+      inputMap: Map[String, Seq[S]]
+  ): Map[String, Seq[(S, SemanticState)]] = {
     for ((term, entries) <- inputMap) yield {
       term -> entries.map(_ -> Ignored(term))
     }
